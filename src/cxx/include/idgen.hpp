@@ -4,6 +4,15 @@
 #include <concepts>
 #include <limits>
 #include <cstdint>
+#include <deque>
+
+
+
+#ifdef assert
+	#define try_assert_(W_) assert(W_)
+#else
+	#define try_assert_(W_) ((void) (W_))
+#endif
 
 
 
@@ -47,20 +56,99 @@ namespace idgen {
 	class IdGenerator {
 	public:
 		T generate() noexcept {
-			auto r = std::underlying_type_t<T>(++ gen_value);
-			#ifdef assert
-				assert(r >= minId<std::underlying_type_t<T>>());
-				assert(r <= maxId<std::underlying_type_t<T>>());
-			#endif
+			using Ut = std::underlying_type_t<T>;
+
+			Ut r;
+
+			if(! gen_recycledSegments.empty()) {
+				auto& segm = gen_recycledSegments.front();
+				r = segm.begin;
+				++ segm.begin;
+				if(segm.begin == segm.end) {
+					gen_recycledSegments.erase(gen_recycledSegments.begin());
+				}
+				return T(r);
+			}
+
+			r = Ut(++ gen_value);
+			try_assert_(r >= minId<Ut>());
+			try_assert_(r <= maxId<Ut>());
 			return T(r);
 		}
 
 		void recycle(T id) {
-			// NOP
+			using Ut = std::underlying_type_t<T>;
+
+			Ut idv = Ut(id);
+
+			try_assert_(idv >= minId<Ut>());
+			try_assert_(idv <= maxId<Ut>());
+
+			if(gen_recycledSegments.empty()) {
+				gen_recycledSegments.push_back({ idv, Ut(idv + Ut(1)) });
+				return;
+			}
+
+			// The back of the queue is a likely element to be removed
+			if(idv == gen_value) {
+				-- gen_value;
+				if(! gen_recycledSegments.empty()) {
+					auto& back = gen_recycledSegments.back();
+					try_assert_(back.begin < back.end);
+					-- back.end;
+					if(back.begin == back.end) gen_recycledSegments.erase(gen_recycledSegments.end() - 1);
+				}
+				return;
+			}
+			try_assert_(idv <= gen_value);
+			if(idv > gen_value) [[unlikely]] return;
+
+			auto insertIter0 = gen_recycledSegments.begin();
+			auto end         = gen_recycledSegments.end();
+			auto insertIter1 = insertIter0 + 1;
+			while(insertIter1 != end) {
+				bool idAlreadyRecycled = (idv >= insertIter0->begin) && (idv < insertIter0->end);
+				try_assert_(! idAlreadyRecycled);
+				if(idAlreadyRecycled) [[unlikely]] return;
+				if(idv < insertIter1->begin) break;
+				insertIter0 = insertIter1;
+				++ insertIter1;
+			}
+
+			try_assert_(idv >= insertIter0->end);
+			bool merged = false;
+			if(idv == insertIter0->end) {
+				++ insertIter0->end;
+				merged = true;
+			}
+			if(insertIter1 != end) {
+				if(insertIter1->begin == Ut(idv + Ut(1))) {
+					merged = true;
+					if(insertIter0->end == insertIter1->begin) {
+						insertIter0->end = insertIter1->end;
+						gen_recycledSegments.erase(insertIter1);
+					} else {
+						-- insertIter1->begin;
+					}
+				}
+			}
+			if(! merged) {
+				gen_recycledSegments.insert(insertIter1, { idv, Ut(idv + Ut(1)) });
+			}
 		}
 
 	private:
+		struct Segment {
+			std::underlying_type_t<T> begin = baseId<std::underlying_type_t<T>>();
+			std::underlying_type_t<T> end   = baseId<std::underlying_type_t<T>>();
+		};
+
 		std::underlying_type_t<T> gen_value = baseId<std::underlying_type_t<T>>() - 1;
+		std::deque<Segment>       gen_recycledSegments;
 	};
 
 }
+
+
+
+#undef try_assert_

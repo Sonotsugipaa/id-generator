@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdlib>
 #include <cstdint>
+#include <set>
 #include <unordered_set>
 
 #include <unistd.h>
@@ -20,8 +21,8 @@ using id8u_e = uint8_t; enum class Id8u : id8u_e { };
 
 
 
-template <typename Id>
-bool testSinglethreaded(size_t gen_count) {
+template <typename Id, bool tp_verbose>
+bool testSequentialGenerations(size_t genCount) {
 	using id_e = std::underlying_type_t<Id>;
 
 	idgen::IdGenerator<Id> generator;
@@ -30,22 +31,54 @@ bool testSinglethreaded(size_t gen_count) {
 	std::string fmtBuffer;
 	fmtBuffer.reserve(128);
 
-	auto expectedGen = idgen::baseId<Id>();
+	Id   expectedGen;
 	Id   gen;
 	bool fail = false;
 
-	for(size_t i = 0; i < gen_count; ++i) {
+	std::set<Id> eraseQueue;
+	size_t eraseCount = 0;
+
+	auto rmId = [&](id_e id) {
+		assert(size_t(id) < genCount);
+		generator.recycle(Id(id));
+		generated.erase(Id(id));
+		eraseQueue.insert(Id(id));
+		++ eraseCount;
+	};
+
+	for(size_t i = 0; i < genCount + eraseCount; ++i) {
+		if(i == genCount / 2) [[unlikely]] {
+			rmId(45);
+			rmId(48);
+			rmId(46);
+			rmId(47);
+		}
+
+		expectedGen = Id(size_t(idgen::baseId<Id>()) + i - eraseCount);
+		if(! eraseQueue.empty()) {
+			expectedGen = * eraseQueue.begin();
+			eraseQueue.erase(eraseQueue.begin());
+		}
+
+		fmtBuffer.clear();
 		gen = generator.generate();
 		if(gen != expectedGen) {
-			fmt::format_to(std::back_inserter(fmtBuffer), "Generated {} instead of {}\n", id_e(gen), id_e(expectedGen));
+			bool ins = generated.insert(gen).second;
+			if(ins) {
+				fmt::format_to(std::back_inserter(fmtBuffer), "Generated  {} instead of {}\n", id_e(gen), id_e(expectedGen)); }
+			else {
+				fmt::format_to(std::back_inserter(fmtBuffer), "Duplicated {} instead of {}\n", id_e(gen), id_e(expectedGen)); }
 			fail = true;
-		}
-		if(! generated.insert(gen).second) {
-			fmt::format_to(std::back_inserter(fmtBuffer), "Generated {} (duplicate)\n", id_e(gen));
-			fail = true;
+		} else {
+			if constexpr(tp_verbose) {
+				fmt::format_to(std::back_inserter(fmtBuffer), "Generated  {}\n", id_e(gen));
+			}
+			if(! generated.insert(gen).second) {
+				fmt::format_to(std::back_inserter(fmtBuffer), "Duplicated {}\n", id_e(gen));
+				fail = true;
+			}
 		}
 		if(! fmtBuffer.empty()) stdoutBuf.writeAll(fmtBuffer.data(), fmtBuffer.size());
-		fmtBuffer.clear();
 		expectedGen = Id(id_e(expectedGen) + 1);
 	}
 
@@ -55,11 +88,14 @@ bool testSinglethreaded(size_t gen_count) {
 
 
 int main(int argn, char** args) {
+	bool fail = false;
+
 	try {
-		testSinglethreaded<Id8s>(128);
-		testSinglethreaded<Id8u>(255);
+		fail = testSequentialGenerations<Id8s, true>(128)? fail : true;
+		fail = testSequentialGenerations<Id8u, true>(255)? fail : true;
 	} catch(...) {
 		return EXIT_FAILURE;
 	}
-	return EXIT_SUCCESS;
+
+	return fail? EXIT_FAILURE : EXIT_SUCCESS;
 }
