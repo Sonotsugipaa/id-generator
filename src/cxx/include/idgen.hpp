@@ -115,25 +115,39 @@ namespace idgen {
 				++ insertIter1;
 			}
 
-			try_assert_(idv >= insertIter0->end);
-			bool merged = false;
-			if(idv == insertIter0->end) {
-				++ insertIter0->end;
-				merged = true;
-			}
-			if(insertIter1 != end) {
-				if(insertIter1->begin == Ut(idv + Ut(1))) {
+			bool gt0 = idv >= insertIter0->end;
+			bool lt0 = idv <  insertIter0->begin;
+			try_assert_(gt0 || lt0);
+			if(gt0) {
+				bool merged = false;
+				if(idv == insertIter0->end) {
+					++ insertIter0->end;
 					merged = true;
-					if(insertIter0->end == insertIter1->begin) {
-						insertIter0->end = insertIter1->end;
-						gen_recycledSegments.erase(insertIter1);
-					} else {
-						-- insertIter1->begin;
+				}
+				if(insertIter1 != end) {
+					if(insertIter1->begin == Ut(idv + Ut(1))) {
+						merged = true;
+						if(insertIter0->end == insertIter1->begin) {
+							insertIter0->end = insertIter1->end;
+							gen_recycledSegments.erase(insertIter1);
+						} else {
+							-- insertIter1->begin;
+						}
 					}
 				}
-			}
-			if(! merged) {
-				gen_recycledSegments.insert(insertIter1, { idv, Ut(idv + Ut(1)) });
+				if(! merged) {
+					gen_recycledSegments.insert(insertIter1, { idv, Ut(idv + Ut(1)) });
+				}
+			} else {
+				try_assert_(lt0);
+				bool merged = false;
+				if(idv == insertIter0->begin - 1) {
+					insertIter0->begin = idv;
+					merged = true;
+				}
+				if(! merged) {
+					gen_recycledSegments.insert(insertIter0, { idv, Ut(idv + Ut(1)) });
+				}
 			}
 		}
 
