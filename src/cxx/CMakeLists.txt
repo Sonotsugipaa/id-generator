@@ -5,26 +5,21 @@ add_library(idgen INTERFACE)
 target_include_directories(idgen INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 
-find_package(posixfio)
+if(IDGEN_ENABLE_TESTS)
 
-if(posixfio_FOUND)
+	find_package(posixfio)
 
-	if(IDGEN_ENABLE_TESTS)
+	if(posixfio_FOUND)
 		add_executable(test test.cpp)
 		target_link_libraries(test idgen posixfio fmt)
-
 		enable_testing()
-
 		add_test(
 			NAME "test"
 			COMMAND "test"
 			WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" )
-	endif(IDGEN_ENABLE_TESTS)
-
-else()
-
-	if(IDGEN_ENABLE_TESTS)
+	else()
 		message(WARNING "Unit testing requires the `posixfio` library, which has not been found.")
-	endif(IDGEN_ENABLE_TESTS)
+	endif(posixfio_FOUND)
 
-endif(posixfio_FOUND)
+endif(IDGEN_ENABLE_TESTS)
+
