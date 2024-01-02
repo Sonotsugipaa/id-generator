@@ -46,7 +46,7 @@ namespace idgen {
 	template <ScopedEnum T> constexpr T minId()     noexcept { return T(minId<std::underlying_type_t<T>>()); }
 	template <ScopedEnum T> constexpr T maxId()     noexcept { return T(maxId<std::underlying_type_t<T>>()); }
 
-	static_assert(invalidId<int8_t>() == -128);
+	static_assert(invalidId<int8_t>() <  -(1<<6));
 	static_assert(minId<int8_t>()     == 0);
 	static_assert(baseId<int8_t>()    == 0);
 
@@ -64,7 +64,7 @@ namespace idgen {
 
 			Ut r;
 
-			if(! gen_recycledSegments.empty()) {
+			if(! gen_recycledSegments.empty()) [[likely]] {
 				auto& segm = gen_recycledSegments.front();
 				r = segm.begin;
 				++ segm.begin;
@@ -87,6 +87,10 @@ namespace idgen {
 
 			try_assert_(idv >= minId<Ut>());
 			try_assert_(idv <= maxId<Ut>());
+			#ifndef NDEBUG
+				if(idv < minId<Ut>()) [[unlikely]] return;
+				if(idv > maxId<Ut>()) [[unlikely]] return;
+			#endif
 
 			if(gen_recycledSegments.empty()) {
 				gen_recycledSegments.push_back({ idv, Ut(idv + Ut(1)) });

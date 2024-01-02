@@ -22,4 +22,3 @@ if(IDGEN_ENABLE_TESTS)
 	endif(posixfio_FOUND)
 
 endif(IDGEN_ENABLE_TESTS)
-
